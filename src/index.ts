@@ -1,7 +1,35 @@
 import EventEmitter from "events";
 import { encode, decode } from "cbor2";
+import bs58check from 'bs58check';
+import createHash from 'create-hash';
 
 
+
+export function get_multisig_name(multisig: BitcoinMultisig): string {
+    const { descriptor: { threshold, signers }, network } = multisig;
+    const type = 'multisig';
+    // Concatenate script-type, threshold, and all signers fingerprints and derivation paths (sorted)
+    let summary = type + '|' + threshold + '|';
+    for (const { fingerprint, path } of signers) {
+        summary += fingerprint + '|' + path + '|';
+    }
+    // Hash it, get the first 6-bytes as hex, prepend with 'hwi'
+    const hash_summary = createHash('sha256').update(summary).digest('hex');
+    return 'hwi' + hash_summary.slice(0, 12);
+}
+
+export function getRootFingerprint(xpub: string): string {
+    const rawBytes = bs58check.decode(xpub);
+    if (rawBytes.length !== 78) {
+      throw new Error('Invalid extended key length');
+    }
+    const pubkey = rawBytes.slice(45, 78);
+    const sha256Hash = createHash('sha256').update(pubkey).digest();
+    const ripemd160Hash = createHash('ripemd160').update(sha256Hash).digest();
+  
+    return ripemd160Hash.slice(0, 4).toString('hex');
+}
+  
 
 
 export interface RPCRequest {
@@ -36,9 +64,23 @@ export interface IDevice extends EventEmitter {
 
 
 export interface BitcoinMultisig {
-
-
+    network: string;
+    multisig_name: string;
+    descriptor: {
+        variant: string;
+        sorted: boolean;
+        threshold: number;
+        signers: Signer[];
+        master_blinding_key: any;
+    };
 };
+
+export interface Signer {
+    xpub: string;
+    derivation: number[];
+    fingerprint: string;
+    path: number[];
+}
 
 export interface IJade {
   connect(): Promise<void>;
